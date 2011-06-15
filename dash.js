@@ -536,30 +536,6 @@ Dashboard = constructor({
         }
 
         remove.call( this._widgets, widget );
-    },
-
-    /**
-     * Stub handler method.
-     *
-     * @param name
-     * Name of the event fired.
-     *
-     * @param args
-     * Arguments associated with the event.
-     *
-     * @param controller
-     * Controller which fired the event.
-     */
-    handle : function ( name, args, controller ) {
-        var L, i, k;
-
-        L = this._listeners[ name ];
-
-        if ( L ) {
-            for ( i = 0, k = L.length; i < k; ++ i ) {
-                L[ i ][ 'handle' + name ]( args, controller );
-            }
-        }
     }
 });
 
