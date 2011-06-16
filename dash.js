@@ -100,7 +100,7 @@ var
     // Local Functions
     //
 
-    constructor , 
+    construct , 
 
     //
     // Utility Objects
@@ -147,45 +147,149 @@ Arrays = {
  * Constructs a new constructor function.
  *
  * @param proto
- * An optional object consisting of properties to assign the constructors
+ * (Optional) object consisting of properties to assign the constructors
  * prototype.
+ *
+ * @param Base
+ * (Optional) Specifies the Base constructor for the one returned.
  *
  * @return 
  * A new constructor function.
  */
-constructor = function ( proto ) {
-    var F, p, i;
-    
-    F = function F() {
-        if ( !( this instanceof F )) {
-            return new F();
-        }
+construct = ( function () {
+    var parseProps, checkGet, checkSet;
 
-        return this;
+    /**
+     * Checks that the corresponding "get" method exists.
+     *
+     * @param proto
+     * Prototype to analyze.
+     *
+     * @param prop
+     * Name of the property.
+     */
+    checkGet = function ( proto, prop ) {
+        var getter = 'get' + prop;
+
+        if ( !proto[ getter ] ) { // It may be inherited
+            proto[ getter ] = function ( self, model ) {
+                return model[ prop ];
+            };
+        }
     };
 
-    if ( proto ) {
-        p = F.prototype;
+    /**
+     * Checks that the corresponding "set" method exists.
+     *
+     * @param proto
+     * Prototype to analyze.
+     *
+     * @param prop
+     * Name of the property.
+     */
+    checkSet = function ( proto, prop ) {
+        var setter = 'set' + prop;
 
-        for ( i in proto ) {
-            if ( proto.hasOwnProperty( i )) {
-                p[ i ] = proto[ i ];
+        if ( !proto[ setter ] ) { // It may be inherited
+            proto[ setter ] = function ( self, model, value ) {
+                model[ prop ] = value;
+            };
+        }
+    };
+
+    /**
+     * Parses all of the properties to make sure that they have their associated
+     * getters and setters.
+     *
+     * @param p
+     * Prototype object to analyze, which contains a mapping of property names
+     * to modes.  The property modes should be self-explanatory, but in case
+     * they need clarification, below are their values and explanations:
+     *
+     * 1. "r"  --> [Read Only ] There may exist only a getter method.
+     * 2. "w"  --> [Write Only] There may exist only a setter method.
+     * 3. "rw" --> [Read-Write] Both a getter and setter may exist.
+     */
+    parseProps = function ( p ) {
+        var i, m, g, s;
+
+        g = checkGet;
+        s = checkSet;
+
+        for ( i in p ) {
+            if ( p.hasOwnProperty( i )) {
+                m = p[ i ]; // Mode of the property
+
+                switch ( m ) {
+                    case 'r'  : g( p, i ); break;
+                    case 'w'  : s( p, i ); break;
+                    case 'rw' : g( p, i ); s( p, i ); break;
+                }
             }
         }
-    }
+    };
 
-    return F;
-};
+    return function construct( proto, Base ) {
+        var F, p, i;
+
+        /**
+         * Simple constructor
+         */
+        F = function F() {
+            if ( !( this instanceof F )) {
+                return new F();
+            }
+
+            return this;
+        };
+
+        /**
+         * Curries a new constructor using an instance of F as its prototype.
+         */
+        F.extend = function ( proto ) {
+            return construct( proto, F );
+        };
+
+        if ( Base ) {
+            F.prototype = new Base();
+            F.prototype.__BASE__ = Base;
+        }
+        
+        p = F.prototype;
+
+        if ( proto ) {
+            for ( i in proto ) {
+                if ( proto.hasOwnProperty( i )) {
+                    p[ i ] = proto[ i ];
+                }
+            }
+
+            if ( p.__PROPERTIES__ ) {
+                parseProps( p );
+            }
+        }
+
+        // Assign some metadata to the prototype
+        p.__PROTOTYPE__   = p;
+        p.__CONSTRUCTOR__ = F;
+
+        return F;
+    };
+}());
 
 /**
  * Maintains the raw data for a Widget.
  */
-Model = constructor();
+Model = construct({
+    EventsFired   : [] , 
+    EventsHandled : [] ,
+    Listeners     : {}
+});
 
 /**
  * Displays the raw data of a Widget.
  */
-View = constructor();
+View = construct();
 
 /**
  * Contains the business logic of a Widget.  It is essential that this
@@ -196,9 +300,9 @@ View = constructor();
  *
  * To actually handle an event named, "MyEvent", first record that the event is
  * handled as described above and then implement a method following the naming
- * convention "handle" + "event name", like so:
+ * convention "on" + "event name", like so:
  *
- *     handleMyEvent : function ( args, controller ) {
+ *     onMyEvent : function ( args, controller ) {
  *         // handle event
  *     }
  *
@@ -209,82 +313,68 @@ View = constructor();
  * exist and will not check for its existence, but will instead throw an
  * exception if it is undefined.
  */
-Controller = constructor({
+Controller = construct({
 
-    _events    : [] ,  // Integers --> Strings
-    _handles   : [] ,  // Integers --> Strings
-    _listeners : {} ,  // Strings  --> Integers --> Objects
+    __PROPERTIES__ : {
 
-    /**
-     * Getter property which returns the names of the events that this
-     * Controller fires.
-     *
-     * @return
-     * The names of this Controller's events.
-     */
-    events : function () {
-        return this._events;
-    },
+        /** Names of the events fired by this Controller */
+        EventsFired : 'r',
 
-    /**
-     * Getter property which returns the name of the events for which this
-     * Controller listens.
-     *
-     * @return
-     * The name of events for which this Controller listens.
-     */
-    handles : function () {
-        return this._handles;
-    },
+        /** Names of the events which are handled by this Controller */
+        EventsHandled : 'r',
 
-    /**
-     * Getter property which returns a mapping of event names to listeners for
-     * the events fired by this Controller.
-     *
-     * @return
-     * The listeners which await events fired by this Controller.
-     */
-    listeners : function () {
-        return this._listeners;
+        /** Mapping of event names to handlers listening for them */
+        Listeners : 'r'
     },
 
     /**
      * Fires an event by invoking every listener for it in this Controller.
      *
-     * @param name
-     * Name of the event to fire.
+     * @param self
+     * Widget managed by this Controller.
      *
-     * @param args
-     * Arguments to pass the listeners.
+     * @param props
+     * Mapping consisting of the name of the event as well as its arguments.
      */
-    fire : function ( name, args ) {
-        var L, i, k;
+    fire : function ( self, props ) {
+        var L, i, k, e, name, args;
 
-        L = this._listeners[ name ];
+        name = props.name;
+        args = props.args;
+
+        L = self.get( 'Listeners' )[ name ];
 
         if ( !L ) {
             return;
         }
 
+        e = 'on' + name;
         for ( i = 0, k = L.length; i < k; ++ i ) {
-            L[ i ][ 'handle' +  name ]( args, this );
+            L[ i ][ e ]( args, self );
         }
     },
 
     /**
      * Adds a listener for a specific event to this Controller.
      *
-     * @param name
-     * Name of the event to listen for.
+     * @param self
+     * Widget managed by this Controller.
      *
-     * @param listener
-     * Method listening for the event.
+     * @param args
+     * Array consisting of the name of two elements: the name of the event and
+     * the method listening for it.
      */
-    addListener : function ( name, listener ) {
-        var L = this._listeners[ name ];
+    addListener : function ( self, args ) {
+        var P, L, name, listener;
+
+        name     = args[ 0 ];
+        listener = args[ 1 ];
+        
+        P = self.get( 'Listeners' );
+        L = P[ name ];
 
         if ( !L ) {
-            L = this._listeners[ name ] = [];
+            L = P[ name ] = [];
         }
 
         L.push( listener );
@@ -294,19 +384,23 @@ Controller = constructor({
      * Returns whether the listener is listening for the specified event in this
      * Controller.
      *
-     * @param name
-     * Name of the event to check.
+     * @param self
+     * Widget managed by this Controller.
      *
-     * @param listener
-     * Method which may be listening for the event.
+     * @param args
+     * Array consisting of the name of two elements: the name of the event and
+     * the method listening for it.
      *
      * @return
      * Whether the listener is listening for the event in this Controller.
      */
-    containsListener : function ( name, listener ) {
-        var L, i, j;
+    containsListener : function ( self, args ) {
+        var L, i, j, name, listener;
+
+        name     = args[ 0 ];
+        listener = args[ 1 ];
         
-        L = this._listeners[ name ];
+        L = self.get( "Listeners" )[ name ];
 
         if ( L ) {
             for ( i = 0, j = L.length; i < j; ++ i ) {
@@ -325,16 +419,21 @@ Controller = constructor({
      * listener needs to be removed from this Controller the same number of
      * times it was added to it.
      *
-     * @param name
-     * Name of the event from which to remove the listener.
+     * @param self
+     * Widget managed by this Controller.
      *
-     * @param listener
-     * Method to remove from the listener.
+     * @param args
+     * Array consisting of the name of two elements: the name of the event and
+     * the method listening for it.
      */
-    removeListener : function ( name, listener ) {
-        var L, i, j;
+    removeListener : function ( self, args ) {
+        var P, L, i, j, name, listener;
+
+        name     = args[ 0 ];
+        listener = args[ 1 ];
         
-        L = this._listeners[ name ];
+        P = self.get( "Listeners" );
+        L = P[ name ];
 
         if ( !L ) {
             return;
@@ -350,7 +449,7 @@ Controller = constructor({
         if ( L.length === 0 ) {
             // Remove the reference to this event from the listeners if there is
             // nothing listening for it.
-            delete this._listeners[ name ];
+            delete P[ name ];
         }
     }
 });
@@ -358,61 +457,37 @@ Controller = constructor({
 /**
  * Constructs a new Widget for the dashboard.
  */
-Widget = constructor({
+Widget = construct({
     
     _model      : null ,
     _view       : null ,
     _controller : null ,
 
     /**
-     * Getter/Setter property for this Widget's Model.
+     * Invokes the method specified on this widget's controller, and passes it
+     * the given arguments.  Implementations may choose to override this method.
      *
-     * @param model
-     * The Model to assign this Widget.
+     * @param method
+     * Name of the method to invoke.
+     *
+     * @param args
+     * Arguments to pass the method.
      *
      * @return
-     * This Widget's Model.
+     * Whatever the corresponding method in the controller returns.
      */
-    model : function ( model ) {
-        if ( model ) {
-            this._model = model;
-        }
-
-        return this._model;
+    call : function ( method, args ) {
+        return this._controller[ method ]( this, args );
     },
 
-    /**
-     * Getter/Setter property for this Widget's View.
-     *
-     * @param view
-     * The View instance to assign this Widget.
-     *
-     * @return
-     * This Widget's View.
-     */
-    view : function ( view ) {
-        if ( view ) {
-            this._view = view;
-        }
-
-        return this._view;
+    get : function ( property ) {
+        var getter = 'get' + property;
+        return this._controller[ getter ]( this, this._model );
     },
 
-    /**
-     * Getter/Setter property for this Widget's Controller.
-     *
-     * @param controller
-     * The Controller to assign this Widget.
-     *
-     * @return
-     * This Widget's Controller.
-     */
-    controller : function ( controller ) {
-        if ( controller ) {
-            this._controller = controller;
-        }
-
-        return this._controller;
+    set : function ( property, value ) {
+        var setter = 'set' + property;
+        return this._controller[ setter ]( this, this._model, value );
     }
 });
 
@@ -420,7 +495,7 @@ Widget = constructor({
  * Using the "observer pattern", Dashboards delegate events across their managed
  * Widgets.
  */
-Dashboard = constructor({
+Dashboard = construct({
     
     _widgets   : [] , // Integers --> Widgets
     _events    : {} , // Strings  --> Integers --> Controllers
@@ -473,7 +548,7 @@ Dashboard = constructor({
                 a = L[ e ] = [];
 
                 // Determine the name of the event handler
-                n = 'handle' + e;
+                n = 'on' + e;
 
                 // Register a new method for event delegation
                 this._addHandler( a, n );
@@ -541,11 +616,12 @@ Dashboard = constructor({
 
 // Globally export the namespace
 window.Dash = {
-    Dashboard  : Dashboard  ,
-    Widget     : Widget     , 
-    Model      : Model      , 
-    View       : View       , 
-    Controller : Controller
+    __VERSION__ : '0.9.0'    , 
+    Dashboard   : Dashboard  , 
+    Widget      : Widget     , 
+    Model       : Model      , 
+    View        : View       , 
+    Controller  : Controller
 };
 
 }( window ));
