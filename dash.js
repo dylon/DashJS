@@ -383,7 +383,7 @@ construct = ( function () {
     // Local Variables
     //
 
-    __SERIAL__ , 
+    serial , 
 
     //
     // Property Functions
@@ -404,7 +404,7 @@ construct = ( function () {
     checkOn             ; 
 
     /** Maintains a count of the current objects */
-    __SERIAL__ = 0;
+    serial = 0;
 
     /**
      * Checks that the corresponding "get" method exists.
@@ -463,7 +463,7 @@ construct = ( function () {
         g = checkGet;
         s = checkSet;
 
-        p = proto.__PROPERTIES__();
+        p = proto.__META__.props;
 
         for ( i in p ) {
             if ( p.hasOwnProperty( i )) {
@@ -473,6 +473,7 @@ construct = ( function () {
                     case 'r'  : g( proto, i ); break;
                     case 'w'  : s( proto, i ); break;
                     case 'rw' : g( proto, i ); s( proto, i ); break;
+                    default   : throw "Unknown mode: " + m;
                 }
             }
         }
@@ -585,7 +586,7 @@ construct = ( function () {
         a = checkAddListener;
         r = checkRemoveListener;
 
-        E = proto.__FIRES__();
+        E = proto.__META__.events.fired;
 
         for ( i = 0, n = E.length; i < n; ++ i ) {
             e = E[ i ];
@@ -606,7 +607,7 @@ construct = ( function () {
      * Name of the event to validate.
      */
     checkOn = function ( proto, event ) {
-        Arrays.insertIfNotExists( proto.__HANDLES__, event );
+        Arrays.insertIfNotExists( proto.__META__.events.handled, event );
     };
 
     /**
@@ -633,9 +634,9 @@ construct = ( function () {
                 return new F();
             }
 
-            if ( this.__BASE__ ) {
+            if ( this.__META__.base ) {
                 // Recursively invoke the super type constructor
-                this.__BASE__.__CONSTRUCTOR__.call( this );
+                this.__META__.base.__META__.constructor.call( this );
 
             } else {
                 // Increment the serial number of objects.  This must be in the
@@ -644,7 +645,7 @@ construct = ( function () {
                 // incremented as many times as there are constructors
                 // otherwise.  As it stands, this will only be invoked from the
                 // "Base" constructor.
-                this.__SERIAL__ = __SERIAL__ = ( __SERIAL__ + 1 );
+                this.__META__.serial = serial = ( serial + 1 );
             }
 
             return this;
@@ -659,10 +660,14 @@ construct = ( function () {
 
         if ( Base ) {
             F.prototype = new Base();
-            F.prototype.__BASE__ = Base;
+            F.prototype.__META__.base = Base;
         }
         
         p = F.prototype;
+
+        if ( !p.__META__ ) {
+            p.__META__ = {};
+        }
 
         if ( proto ) {
             for ( i in proto ) {
@@ -676,18 +681,18 @@ construct = ( function () {
                 }
             }
 
-            if ( p.__PROPERTIES__ ) {
+            if ( p.__META__.props ) {
                 parseProps( p );
             }
 
-            if ( p.__FIRES__ ) {
+            if ( p.__META__.events.fired ) {
                 parseEvents( p );
             }
         }
 
         // Assign some metadata to the prototype
-        p.__PROTOTYPE__   = p;
-        p.__CONSTRUCTOR__ = F;
+        p.__META__.prototype   = p;
+        p.__META__.constructor = F;
 
         return F;
     };
@@ -697,9 +702,10 @@ construct = ( function () {
  * Contains basic methods which should be inherited by all the objects.
  */
 Base = construct({
-    
-    /** [METADATA] Serial number of this Base object */
-    __SERIAL__ : 0 ,
+
+    __META__ : {
+        serial : 0
+    },
 
     /**
      * Overrides Object.prototype.valueOf() to return the serial number of this
@@ -707,10 +713,10 @@ Base = construct({
      * consistency with this.toString().
      *
      * @return
-     * this.__SERIAL__
+     * this.__META__.serial
      */
     valueOf : function () {
-        return Number( this.__SERIAL__ );
+        return Number( this.__META__.serial );
     },
 
     /**
@@ -718,10 +724,10 @@ Base = construct({
      * a key for a mapping.
      *
      * @return
-     * this.__SERIAL__
+     * this.__META__.serial
      */
     toString : function () {
-        return String( this.__SERIAL__ );
+        return String( this.__META__.serial );
     }
 });
 
@@ -815,34 +821,27 @@ View = Base.extend();
  */
 Controller = Base.extend({
 
-    /**
-     * [METADATA] Returns properties maintained by this Controller.
-     *
-     * @return
-     * A mapping of names to modes of the properties maintaine by this
-     * Controller.  The available modes include:
-     *
-     * 1. "r"  --> [Read Only ] Implies there may be only a getter.
-     * 2. "w"  --> [Write Only] Implies there may be only a setter.
-     * 3. "rw" --> [Read/Write] Implies both a getter and a setter.
-     */
-    __PROPERTIES__ : function () {
-        return {};
-    },
+    __META__ : {
 
-    /** 
-     * [METADATA] Returns the names of events fired by this Controller.
-     *
-     * @return
-     * Names of events fired by this Controller.
-     */
-    __FIRES__ : function () {
-        return [];
-    },
+        /**
+         * [METADATA] Returns properties maintained by this Controller.
+         *
+         * @return
+         * A mapping of names to modes of the properties maintaine by this
+         * Controller.  The available modes include:
+         *
+         * 1. "r"  --> [Read Only ] Implies there may be only a getter.
+         * 2. "w"  --> [Write Only] Implies there may be only a setter.
+         * 3. "rw" --> [Read/Write] Implies both a getter and a setter.
+         */
+        props : {} , 
 
-    /** [METADATA] Dynamically populated array of event names handled by this
-     * Controller. */
-    __HANDLES__ : [],
+        /** [METADATA] Self-explanatory eventing data */
+        events : {
+            fired   : [] , 
+            handled : []
+        }
+    },
 
     create : function ( self, model, view, controller ) {
         self._model      = model      ; 
@@ -1023,10 +1022,6 @@ Dashboard = Base.extend({
 
         L = this._listeners;
 
-        /*
-         * TODO: Lots and lots and lots of API updates ...
-         */
-
         for ( i = 0, k = H.length; i < k; ++ i ) {
             e = H[ i ];
             a = L[ e ];
@@ -1039,9 +1034,13 @@ Dashboard = Base.extend({
     }
 });
 
-// Globally export the namespace
+// Globally export the Dash module
 window.Dash = {
-    __VERSION__ : '0.9.0'    , 
+
+    __META__ : {
+        version : '0.9.0'
+    },
+
     Dashboard   : Dashboard  , 
     Widget      : Widget     , 
     Model       : Model      , 
