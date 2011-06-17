@@ -40,10 +40,10 @@
   maxlen     : 80    , 
   newcap     : false , 
   node       : false , 
-  nomen      : false , 
+  nomen      : true  , 
   on         : false , 
   passfail   : false , 
-  plusplus   : false , 
+  plusplus   : true  , 
   regexp     : false , 
   safe       : false , 
   sloppy     : false , 
@@ -51,7 +51,7 @@
   undef      : false , 
   unparam    : false , 
   vars       : false , 
-  white      : false , 
+  white      : true  , 
   widget     : false , 
   windows    : false , 
 */
@@ -86,28 +86,28 @@
 'use strict';
 
 var
-    //
-    // Constructor Functions
-    //
+//
+// Constructor Functions
+//
 
-    Model      , 
-    View       , 
-    Controller , 
-    Widget     ,
-    Dashboard  , 
+Base       ,
+Model      , 
+View       , 
+Controller , 
+Widget     ,
+Dashboard  , 
 
-    //
-    // Local Functions
-    //
+//
+// Local Functions
+//
 
-    construct , 
+construct , 
 
-    //
-    // Utility Objects
-    //
-    
-    Arrays
-;
+//
+// Utility Objects
+//
+
+Arrays ;
 
 /**
  * Contains utility methods for managing arrays.
@@ -119,7 +119,7 @@ Arrays = {
      *
      *    // `a' is the array from which to remove an element.
      *    // `e' is the element to remove.
-     *    Arrays.remove.call( a, e );
+     *    Arrays.remove( a, e );
      *
      * This mimics appending the method to the Array prototype, and helps keep
      * the global namespace clean as well as better facilitates calling the
@@ -127,37 +127,284 @@ Arrays = {
      * effectively like so:
      *
      *     var r = Arrays.remove;
-     *     r.call( a, e );
+     *     r( a, e );
      *
      * , which isn't as verbose as the first example.
+     *
+     * @param self
+     * Array from which to remove the element.
+     *
+     * @param elem
+     * Element to remove from the array.
      */
-    remove : function ( e ) {
+    remove : function ( self, elem ) {
+        var i = Arrays.indexOf( self, elem );
+
+        if ( i >= 0 ) {
+            self.splice( i, 1 );
+        }
+    },
+
+    /**
+     * Removes an element from a sorted array.  Because the array is sorted, a
+     * binary search may be used to locate the element (if it exists) without
+     * having to iterate over every element.
+     *
+     * @param self
+     * Array from which to remove an element.
+     *
+     * @param elem
+     * Element to remove from the array.
+     *
+     * @param compare
+     * (Optional) Binary function which compares the element to remove with
+     * those in the array.  It should return zero (0) for equivalent elements, a
+     * value greater than zero (1) for elements less than the one to remove, and
+     * a value less than zero (-1) for elements greater than the element to
+     * remove.
+     */
+    removeSorted : function ( self, elem, compare ) {
+        var i = Arrays.binarySearch( self, elem, compare );
+
+        if ( i >= 0 ) {
+            self.splice( i, 1 );
+        }
+    },
+
+    /**
+     * Iterates over the elements in an array to determine an index at which one
+     * specific element resides.  This method iterates from the first to last
+     * element while at the same time iterating from the last to the first in
+     * search of the first index at which the element is located; thus, if the
+     * element occurs more than once in the array, its index closest to either
+     * the beginning or end of the array will be returned.
+     *
+     * @param self
+     * Array to search through.
+     *
+     * @param elem
+     * Element to find in the array.
+     *
+     * @return
+     * An index in the array containing the element or (-1) if it is not found.
+     */
+    indexOf : function ( self, elem ) {
+        var i, j;
+
+        for ( i = 0, j = self.length - 1; i <= j; ++ i, -- j ) {
+            if ( self[ i ] === elem ) { return i; }
+            if ( self[ j ] === elem ) { return j; }
+        }
+
+        return -1;
+    },
+
+    /**
+     * Iterates over an array in search of a specific element from its first
+     * index to its last, and returns the first index at which the element is
+     * located.
+     *
+     * @param self
+     * Array through which to search for elem.
+     *
+     * @param elem
+     * Element to find in the array.
+     *
+     * @return
+     * The first index of the array mapped to the element or (-1) if it is not
+     * found.
+     */
+    firstIndexOf : function ( self, elem ) {
         var i, k;
 
-        for ( i = 0, k = this.length; i < k; ++ i ) {
-            if ( this[ i ] === e ) {
-                this.splice( i, 1 );
-                return;
-            }
+        for ( i = 0, k = self.length; i < k; ++ i ) {
+            if ( self[ i ] === elem ) { return i; }
         }
+
+        return -1;
+    },
+
+    /**
+     * Iterates over an array from its last index to its first in search of a
+     * specific element.  Returns the last index mapped to the same element.
+     *
+     * @param self
+     * Array through which to search for the element.
+     *
+     * @param elem
+     * Element to locate in the array.
+     *
+     * @return
+     * The last index of the array mapped to the element or (-1) if it is not
+     * found.
+     */
+    lastIndexOf : function ( self, elem ) {
+        var i;
+
+        for ( i = self.length - 1; i >= 0; -- i ) {
+            if ( self[ i ] === elem ) { return i; }
+        }
+
+        return -1;
+    },
+
+    /**
+     * Default comparator for JavaScript array elements.  It accepts two
+     * parameters and compares the numberic value (*.valueOf()) of the first
+     * with that of the second.
+     *
+     * @param e1
+     * First element to compare.
+     *
+     * @param e2
+     * Second element to compare.
+     *
+     * @return
+     * An integer value corresponding to whether e1 is greater than e2 (1), less
+     * than e2 (-1), or equivalent to e2 (0).
+     */
+    comparator : function ( e1, e2 ) {
+        return ( e1 > e2 ) ? 1 : ( e1 < e2 ) ? -1 : 0;
+    },
+
+    /**
+     * Searches over the elements of an array for a specific one using a binary
+     * search algorithm.
+     *
+     * @param self
+     * Array to search through.
+     *
+     * @param elem
+     * Element to find in the array.
+     *
+     * @param compare
+     * (Optional) Binary function which compares the element to locate with
+     * those in the array.  This should return an integer value corresponding to
+     * how the element relates to each.
+     *
+     * @return
+     * The first index of the array mapped to the element or (-1) if it is not
+     * found.
+     */
+    binarySearch : function ( self, elem, compare ) {
+        var i, j, k, c;
+
+        if ( !compare ) {
+            compare = Arrays.comparator;
+        }
+
+        i = 0;
+        k = self.length;
+
+        do {
+            // Round to the nearest integer ...
+            j = Math.floor(( i + k ) / 2.0 + 0.5 );
+            c = compare( elem, self[ j ] );
+
+            if ( c > 0 ) {
+                i = j + 1; continue;
+            }
+
+            if ( c < 0 ) {
+                k = j - 1; continue;
+            }
+
+            // Otherwise, this is the index.
+            return j;
+        } while ( i < k );
+
+        return -1;
+    },
+
+    /**
+     * Inserts an element into an array if it does not yet exist therein.  It is
+     * important that the array be sorted because this method uses a binary
+     * search algorithm to determine where to insert the element.
+     *
+     * @param self
+     * Array into which to insert the element.
+     *
+     * @param elem
+     * Element to insert in to the array.
+     *
+     * @param compare
+     * (Optional) Binary function which compares the element to insert with
+     * those in the array.  It should return a numeric value corresponding to
+     * how the elements relate, with (0) being equivalent, (1) being greater
+     * than, and (-1) being less than.
+     */
+    insertIfNotExists : function ( self, elem, compare ) {
+        var i, j, k, c;
+
+        if ( !compare ) {
+            compare = Arrays.comparator;
+        }
+
+        i = 0;
+        k = self.length;
+
+        do {
+            // Round to the nearest integer ...
+            j = Math.floor(( i + k ) / 2.0 + 0.5 );
+            c = compare( elem, self[ j ] );
+
+            if ( c > 0 ) {
+                i = j + 1; continue;
+            }
+
+            if ( c < 0 ) {
+                k = j - 1; continue;
+            }
+
+            // Otherwise, the element exists so return here.
+            return;
+        } while ( i < k );
+        
+        // Compare elements one more time ...
+        j = Math.floor(( i + k ) / 2.0 + 0.5 );
+        c = compare( elem, self[ j ] );
+
+        if ( c > 0 ) {
+            j = j + 1;
+        }
+
+        // Insert the element into its new home ...
+        self.splice( j, 0, elem );
     }
 };
 
 /**
- * Constructs a new constructor function.
- *
- * @param proto
- * (Optional) object consisting of properties to assign the constructors
- * prototype.
- *
- * @param Base
- * (Optional) Specifies the Base constructor for the one returned.
- *
- * @return 
- * A new constructor function.
+ * Constructor constructor
  */
 construct = ( function () {
-    var parseProps, checkGet, checkSet;
+    var
+
+    //
+    // Local Variables
+    //
+
+    __SERIAL__ , 
+
+    //
+    // Property Functions
+    //
+
+    parseProps , 
+    checkGet   , 
+    checkSet   , 
+
+    //
+    // Event Functions
+    //
+
+    parseEvents         , 
+    checkFire           , 
+    checkAddListener    , 
+    checkRemoveListener , 
+    checkOn             ; 
+
+    /** Maintains a count of the current objects */
+    __SERIAL__ = 0;
 
     /**
      * Checks that the corresponding "get" method exists.
@@ -173,7 +420,7 @@ construct = ( function () {
 
         if ( !proto[ getter ] ) { // It may be inherited
             proto[ getter ] = function ( self, model ) {
-                return model[ prop ];
+                return model.get( self, prop );
             };
         }
     };
@@ -192,7 +439,7 @@ construct = ( function () {
 
         if ( !proto[ setter ] ) { // It may be inherited
             proto[ setter ] = function ( self, model, value ) {
-                model[ prop ] = value;
+                return model.set( self, prop, value );
             };
         }
     };
@@ -201,7 +448,7 @@ construct = ( function () {
      * Parses all of the properties to make sure that they have their associated
      * getters and setters.
      *
-     * @param p
+     * @param proto
      * Prototype object to analyze, which contains a mapping of property names
      * to modes.  The property modes should be self-explanatory, but in case
      * they need clarification, below are their values and explanations:
@@ -210,27 +457,173 @@ construct = ( function () {
      * 2. "w"  --> [Write Only] There may exist only a setter method.
      * 3. "rw" --> [Read-Write] Both a getter and setter may exist.
      */
-    parseProps = function ( p ) {
-        var i, m, g, s;
+    parseProps = function ( proto ) {
+        var p, i, m, g, s;
 
         g = checkGet;
         s = checkSet;
+
+        p = proto.__PROPERTIES__();
 
         for ( i in p ) {
             if ( p.hasOwnProperty( i )) {
                 m = p[ i ]; // Mode of the property
 
                 switch ( m ) {
-                    case 'r'  : g( p, i ); break;
-                    case 'w'  : s( p, i ); break;
-                    case 'rw' : g( p, i ); s( p, i ); break;
+                    case 'r'  : g( proto, i ); break;
+                    case 'w'  : s( proto, i ); break;
+                    case 'rw' : g( proto, i ); s( proto, i ); break;
                 }
             }
         }
     };
 
+    /**
+     * Ensures that a corresponding "fireXXX" method exists for the given envet.
+     *
+     * @param proto
+     * Prototype to validate.
+     *
+     * @param event
+     * Name of the event which is fired by the prototype.
+     */
+    checkFire = function ( proto, event ) {
+        var f = "fire" + event;
+
+        if ( !proto[ f ] ) {
+            proto[ f ] = function ( self, args ) {
+                var L, H, i, n, o;
+
+                L = self.get( "Listeners" );
+                H = L[ event ];
+
+                if ( H ) {
+                    o = "on" + event;
+
+                    for ( i = 0, n = H.length; i < n; ++ i ) {
+                        H[ i ][ o ]( self, args );
+                    }
+                }
+            };
+        }
+    };
+
+    /**
+     * Ensures that an "addXXXListener" method exists for the specified event.
+     *
+     * @param proto
+     * Prototype to validate.
+     *
+     * @param event
+     * Name of the event for which to listen.
+     */
+    checkAddListener = function ( proto, event ) {
+        var a = "add" + event + "Listener";
+
+        if ( !proto[ a ] ) {
+            proto[ a ] = function ( self, listener ) {
+                var L, H;
+
+                L = self.get( "Listeners" );
+                H = L[ event ];
+
+                if ( !H ) {
+                    H = L[ event ] = [];
+                }
+
+                H.push( listener );
+            };
+        }
+    };
+
+    /**
+     * Ensures that there exists a "removeXXXListener" method for the given
+     * event.
+     *
+     * @param proto
+     * Prototype to validate.
+     *
+     * @param event
+     * Name of the event to validate.
+     */
+    checkRemoveListener = function ( proto, event ) {
+        var r = "remove" + event + "Listener";
+
+        if ( !proto[ r ] ) {
+            proto[ r ] = function ( self, listener ) {
+                var L, H, i;
+
+                L = self.get( "Listeners" );
+                H = L[ event ];
+                
+                if ( !H ) {
+                    return;
+                }
+
+                i = Arrays.indexOf( H, listener );
+
+                if ( i < 0 ) {
+                    return;
+                }
+
+                H.splice( i, 1 );
+            };
+        }
+    };
+
+    /**
+     * Parses all of the events of a particular prototype to ensure that all of
+     * their necessary members (methods, ...) exist.
+     *
+     * @param proto
+     * Prototype to validate.
+     */
+    parseEvents = function ( proto ) {
+        var E, e, i, n, f, a, r;
+
+        f = checkFire;
+        a = checkAddListener;
+        r = checkRemoveListener;
+
+        E = proto.__FIRES__();
+
+        for ( i = 0, n = E.length; i < n; ++ i ) {
+            e = E[ i ];
+
+            f( proto, e );
+            a( proto, e );
+            r( proto, e );
+        }
+    };
+
+    /**
+     * Ensures that all members required for the to handled event exist.
+     *
+     * @param proto
+     * Prototype to verify.
+     * 
+     * @param event
+     * Name of the event to validate.
+     */
+    checkOn = function ( proto, event ) {
+        Arrays.insertIfNotExists( proto.__HANDLES__, event );
+    };
+
+    /**
+     * Constructs a new constructor function.
+     *
+     * @param proto
+     * (Optional) object consisting of properties to assign the constructors
+     * prototype.
+     *
+     * @param Base
+     * (Optional) Specifies the Base constructor for the one returned.
+     *
+     * @return 
+     * A new constructor function.
+     */
     return function construct( proto, Base ) {
-        var F, p, i;
+        var F, p, i, r;
 
         /**
          * Simple constructor
@@ -238,6 +631,20 @@ construct = ( function () {
         F = function F() {
             if ( !( this instanceof F )) {
                 return new F();
+            }
+
+            if ( this.__BASE__ ) {
+                // Recursively invoke the super type constructor
+                this.__BASE__.__CONSTRUCTOR__.call( this );
+
+            } else {
+                // Increment the serial number of objects.  This must be in the
+                // "else" block because the constructors are recursively called
+                // up the inheritance chain and the serial number would be
+                // incremented as many times as there are constructors
+                // otherwise.  As it stands, this will only be invoked from the
+                // "Base" constructor.
+                this.__SERIAL__ = __SERIAL__ = ( __SERIAL__ + 1 );
             }
 
             return this;
@@ -261,11 +668,20 @@ construct = ( function () {
             for ( i in proto ) {
                 if ( proto.hasOwnProperty( i )) {
                     p[ i ] = proto[ i ];
+                    
+                    // Check for an "onXXX" event handler
+                    if (( r = /^on([A-Z]\w*)$/.exec( i )) !== null ) {
+                        checkOn( proto, r[ 1 ] );
+                    }
                 }
             }
 
             if ( p.__PROPERTIES__ ) {
                 parseProps( p );
+            }
+
+            if ( p.__FIRES__ ) {
+                parseEvents( p );
             }
         }
 
@@ -278,18 +694,102 @@ construct = ( function () {
 }());
 
 /**
+ * Contains basic methods which should be inherited by all the objects.
+ */
+Base = construct({
+    
+    /** [METADATA] Serial number of this Base object */
+    __SERIAL__ : 0 ,
+
+    /**
+     * Overrides Object.prototype.valueOf() to return the serial number of this
+     * object for whatever reason it may be useful.  This is mainly for
+     * consistency with this.toString().
+     *
+     * @return
+     * this.__SERIAL__
+     */
+    valueOf : function () {
+        return Number( this.__SERIAL__ );
+    },
+
+    /**
+     * Overrides Object.prototype.toString() so that this object can be used as
+     * a key for a mapping.
+     *
+     * @return
+     * this.__SERIAL__
+     */
+    toString : function () {
+        return String( this.__SERIAL__ );
+    }
+});
+
+/**
  * Maintains the raw data for a Widget.
  */
-Model = construct({
-    EventsFired   : [] , 
-    EventsHandled : [] ,
-    Listeners     : {}
+Model = Base.extend({
+
+    /**
+     * [INTERNAL METHOD] Returns the database object for a given Widget.
+     *
+     * @param self
+     * Widget for which to retrieve a database.
+     *
+     * @return
+     * The database object corresponding to the Widget.
+     */
+    _getDB : function ( self ) {
+        var db = this[ self ];
+
+        if ( !db ) {
+            // The *.toString() method is overridden in the Base prototype, so
+            // subscripting "self" is fine.
+            db = this[ self ] = {
+                Listeners : {}
+            };
+        }
+
+        return db;
+    },
+
+    /**
+     * With regard to the Widget, returns the value mapped to by the key.
+     *
+     * @param self
+     * Widget having this model.
+     *
+     * @param key
+     * Key for the mapping.
+     *
+     * @return
+     * Whatever is mapped to by the key having the Widget as its context.
+     */
+    get : function ( self, key ) {
+        return this._getDB( self )[ key ];
+    },
+
+    /**
+     * With regard to the Widget, maps a given key to its value.
+     *
+     * @param self
+     * Widget having this model.
+     *
+     * @param key
+     * Key for the mapping.
+     *
+     * @param value
+     * Value for the mapping.
+     */
+    set : function ( self, key, value ) {
+        this._getDB( self )[ key ] = value;
+    }
 });
 
 /**
  * Displays the raw data of a Widget.
  */
-View = construct();
+View = Base.extend();
 
 /**
  * Contains the business logic of a Widget.  It is essential that this
@@ -302,7 +802,7 @@ View = construct();
  * handled as described above and then implement a method following the naming
  * convention "on" + "event name", like so:
  *
- *     onMyEvent : function ( args, controller ) {
+ *     onMyEvent : function ( widget, args ) {
  *         // handle event
  *     }
  *
@@ -313,151 +813,72 @@ View = construct();
  * exist and will not check for its existence, but will instead throw an
  * exception if it is undefined.
  */
-Controller = construct({
-
-    __PROPERTIES__ : {
-
-        /** Names of the events fired by this Controller */
-        EventsFired : 'r',
-
-        /** Names of the events which are handled by this Controller */
-        EventsHandled : 'r',
-
-        /** Mapping of event names to handlers listening for them */
-        Listeners : 'r'
-    },
+Controller = Base.extend({
 
     /**
-     * Fires an event by invoking every listener for it in this Controller.
-     *
-     * @param self
-     * Widget managed by this Controller.
-     *
-     * @param props
-     * Mapping consisting of the name of the event as well as its arguments.
-     */
-    fire : function ( self, props ) {
-        var L, i, k, e, name, args;
-
-        name = props.name;
-        args = props.args;
-
-        L = self.get( 'Listeners' )[ name ];
-
-        if ( !L ) {
-            return;
-        }
-
-        e = 'on' + name;
-        for ( i = 0, k = L.length; i < k; ++ i ) {
-            L[ i ][ e ]( args, self );
-        }
-    },
-
-    /**
-     * Adds a listener for a specific event to this Controller.
-     *
-     * @param self
-     * Widget managed by this Controller.
-     *
-     * @param args
-     * Array consisting of the name of two elements: the name of the event and
-     * the method listening for it.
-     */
-    addListener : function ( self, args ) {
-        var P, L, name, listener;
-
-        name     = args[ 0 ];
-        listener = args[ 1 ];
-        
-        P = self.get( 'Listeners' );
-        L = P[ name ];
-
-        if ( !L ) {
-            L = P[ name ] = [];
-        }
-
-        L.push( listener );
-    },
-
-    /**
-     * Returns whether the listener is listening for the specified event in this
-     * Controller.
-     *
-     * @param self
-     * Widget managed by this Controller.
-     *
-     * @param args
-     * Array consisting of the name of two elements: the name of the event and
-     * the method listening for it.
+     * [METADATA] Returns properties maintained by this Controller.
      *
      * @return
-     * Whether the listener is listening for the event in this Controller.
+     * A mapping of names to modes of the properties maintaine by this
+     * Controller.  The available modes include:
+     *
+     * 1. "r"  --> [Read Only ] Implies there may be only a getter.
+     * 2. "w"  --> [Write Only] Implies there may be only a setter.
+     * 3. "rw" --> [Read/Write] Implies both a getter and a setter.
      */
-    containsListener : function ( self, args ) {
-        var L, i, j, name, listener;
-
-        name     = args[ 0 ];
-        listener = args[ 1 ];
-        
-        L = self.get( "Listeners" )[ name ];
-
-        if ( L ) {
-            for ( i = 0, j = L.length; i < j; ++ i ) {
-                if ( L[ i ] === listener ) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+    __PROPERTIES__ : function () {
+        return {};
     },
 
-    /**
-     * Removes a listener method from this Controller.  NOTE: This method only
-     * removes the first instance of the listener found, not all of them; the
-     * listener needs to be removed from this Controller the same number of
-     * times it was added to it.
+    /** 
+     * [METADATA] Returns the names of events fired by this Controller.
      *
-     * @param self
-     * Widget managed by this Controller.
-     *
-     * @param args
-     * Array consisting of the name of two elements: the name of the event and
-     * the method listening for it.
+     * @return
+     * Names of events fired by this Controller.
      */
-    removeListener : function ( self, args ) {
-        var P, L, i, j, name, listener;
+    __FIRES__ : function () {
+        return [];
+    },
 
-        name     = args[ 0 ];
-        listener = args[ 1 ];
-        
-        P = self.get( "Listeners" );
-        L = P[ name ];
+    /** [METADATA] Dynamically populated array of event names handled by this
+     * Controller. */
+    __HANDLES__ : [],
 
-        if ( !L ) {
-            return;
-        }
+    create : function ( self, model, view, controller ) {
+        self._model      = model      ; 
+        self._view       = view       ; 
+        self._controller = controller ; 
+    },
 
-        for ( i = 0, j = L.length; i < j; ++ i ) {
-            if ( L[ i ] === listener ) {
-                L.splice( i, 1 );
-                break;
-            }
-        }
+    destroy : function ( self ) {
+        return;
+    },
 
-        if ( L.length === 0 ) {
-            // Remove the reference to this event from the listeners if there is
-            // nothing listening for it.
-            delete P[ name ];
-        }
+    init : function ( self ) {
+        return;
+    },
+
+    enable : function ( self ) {
+        throw "Not yet implemented";
+    },
+
+    disable : function ( self ) {
+        throw "Not yet implemented";
+    },
+
+    show : function ( self ) {
+        throw "Not yet implemented";
+    },
+
+    hide : function ( self ) {
+        throw "Not yet implemented";
     }
 });
 
 /**
  * Constructs a new Widget for the dashboard.
  */
-Widget = construct({
+Widget = Base.extend({
     
     _model      : null ,
     _view       : null ,
@@ -495,7 +916,7 @@ Widget = construct({
  * Using the "observer pattern", Dashboards delegate events across their managed
  * Widgets.
  */
-Dashboard = construct({
+Dashboard = Base.extend({
     
     _widgets   : [] , // Integers --> Widgets
     _events    : {} , // Strings  --> Integers --> Controllers
@@ -575,7 +996,7 @@ Dashboard = construct({
         L = this._listeners;
 
         this._registerEvents( E, L, function ( e, a ) {
-            c.addListener( e, this );
+            c[ 'add' + e + 'Listener' ]( this );
         });
 
         this._registerEvents( H, L, function ( e, a ) {
@@ -602,15 +1023,19 @@ Dashboard = construct({
 
         L = this._listeners;
 
+        /*
+         * TODO: Lots and lots and lots of API updates ...
+         */
+
         for ( i = 0, k = H.length; i < k; ++ i ) {
             e = H[ i ];
             a = L[ e ];
 
-            c.removeListener( e, this );
-            remove.call( a, c );
+            c[ 'remove' + e + 'Listener' ]( widget, this );
+            remove( a, c );
         }
 
-        remove.call( this._widgets, widget );
+        remove( this._widgets, widget );
     }
 });
 
