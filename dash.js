@@ -86,6 +86,13 @@
 'use strict';
 
 var
+
+//
+// Interfaces
+//
+
+IApplet ,
+
 //
 // Constructor Functions
 //
@@ -386,6 +393,13 @@ construct = ( function () {
     serial , 
 
     //
+    // Function methods
+    //
+
+    extend      , 
+    specializes , 
+
+    //
     // Property Functions
     //
 
@@ -419,8 +433,8 @@ construct = ( function () {
         var getter = 'get' + prop;
 
         if ( !proto[ getter ] ) { // It may be inherited
-            proto[ getter ] = function ( self, model ) {
-                return model.get( self, prop );
+            proto[ getter ] = function ( self, model, def ) {
+                return model.get( self, prop, def );
             };
         }
     };
@@ -611,6 +625,41 @@ construct = ( function () {
     };
 
     /**
+     * Extends this constructor with another object.
+     *
+     * @param iface
+     * Object containing the methods and properties to assign this constructor.
+     *
+     * @return
+     * This constructor again for chaining.
+     */
+    extend = function ( iface ) {
+        var i;
+
+        for ( i in iface ) {
+            if ( iface.hasOwnProperty( i ) && ( this[ i ] === undef )) {
+                this[ i ] = iface[ i ];
+            }
+        }
+
+        return this;
+    };
+
+    /**
+     * Specializes this constructor by returning a new constructor having all of
+     * the members of this one plus the additional ones in proto.
+     *
+     * @param proto
+     * Prototype to specialize with.
+     *
+     * @return 
+     * A new constructor specialized from this one.
+     */
+    specialize = function ( proto ) {
+        return construct( proto, this.__META__.constructor );
+    };
+
+    /**
      * Constructs a new constructor function.
      *
      * @param proto
@@ -651,13 +700,6 @@ construct = ( function () {
             return this;
         };
 
-        /**
-         * Curries a new constructor using an instance of F as its prototype.
-         */
-        F.extend = function ( proto ) {
-            return construct( proto, F );
-        };
-
         if ( Base ) {
             F.prototype = new Base();
             F.prototype.__META__.base = Base;
@@ -694,9 +736,51 @@ construct = ( function () {
         p.__META__.prototype   = p;
         p.__META__.constructor = F;
 
+        // Additional methods
+        F.extend = extend;
+        F.specialize = specialize;
+
+        if ( !p.specialize ) {
+            p.specialize = specialize;
+        }
+
         return F;
     };
 }());
+
+/**
+ * Interface specifying applet-like functions.
+ */
+IApplet = {
+
+    create : function ( self ) {
+        throw "Not yet implemented";
+    },
+
+    destroy : function ( self ) {
+        throw "Not yet implemented";
+    },
+
+    init : function ( self ) {
+        throw "Not yet implemented";
+    },
+
+    enable : function ( self ) {
+        throw "Not yet implemented";
+    },
+
+    disable : function ( self ) {
+        throw "Not yet implemented";
+    },
+
+    show : function ( self ) {
+        throw "Not yet implemented";
+    },
+
+    hide : function ( self ) {
+        throw "Not yet implemented";
+    }
+};
 
 /**
  * Contains basic methods which should be inherited by all the objects.
@@ -731,10 +815,13 @@ Base = construct({
     }
 });
 
+// All Base implementations should implement IApplet
+Base.extend( IApplet );
+
 /**
  * Maintains the raw data for a Widget.
  */
-Model = Base.extend({
+Model = Base.specialize({
 
     /**
      * [INTERNAL METHOD] Returns the database object for a given Widget.
@@ -768,11 +855,24 @@ Model = Base.extend({
      * @param key
      * Key for the mapping.
      *
+     * @param def
+     * (Optional) A default value or function to assign this model at the key if
+     * the current value at the key is undefined.
+     *
      * @return
      * Whatever is mapped to by the key having the Widget as its context.
      */
-    get : function ( self, key ) {
-        return this._getDB( self )[ key ];
+    get : function ( self, key, def ) {
+        var DB, val;
+
+        DB = this._getDB( self );
+        val = [ key ];
+
+        if (( val === undef ) && ( def !== undef )) {
+            val = DB[ key ] = ( def instanceof Function ) ? def() : def;
+        }
+
+        return val;
     },
 
     /**
@@ -795,7 +895,7 @@ Model = Base.extend({
 /**
  * Displays the raw data of a Widget.
  */
-View = Base.extend();
+View = Base.specialize();
 
 /**
  * Contains the business logic of a Widget.  It is essential that this
@@ -819,7 +919,7 @@ View = Base.extend();
  * exist and will not check for its existence, but will instead throw an
  * exception if it is undefined.
  */
-Controller = Base.extend({
+Controller = Base.specialize({
 
     __META__ : {
 
@@ -834,50 +934,20 @@ Controller = Base.extend({
          * 2. "w"  --> [Write Only] Implies there may be only a setter.
          * 3. "rw" --> [Read/Write] Implies both a getter and a setter.
          */
-        props : {} , 
+        props : {}, 
 
         /** [METADATA] Self-explanatory eventing data */
         events : {
             fired   : [] , 
             handled : []
         }
-    },
-
-    create : function ( self, model, view, controller ) {
-        self._model      = model      ; 
-        self._view       = view       ; 
-        self._controller = controller ; 
-    },
-
-    destroy : function ( self ) {
-        return;
-    },
-
-    init : function ( self ) {
-        return;
-    },
-
-    enable : function ( self ) {
-        throw "Not yet implemented";
-    },
-
-    disable : function ( self ) {
-        throw "Not yet implemented";
-    },
-
-    show : function ( self ) {
-        throw "Not yet implemented";
-    },
-
-    hide : function ( self ) {
-        throw "Not yet implemented";
     }
 });
 
 /**
  * Constructs a new Widget for the dashboard.
  */
-Widget = Base.extend({
+Widget = Base.specialize({
     
     _model      : null ,
     _view       : null ,
@@ -900,14 +970,64 @@ Widget = Base.extend({
         return this._controller[ method ]( this, args );
     },
 
-    get : function ( property ) {
-        var getter = 'get' + property;
-        return this._controller[ getter ]( this, this._model );
+    /**
+     * Retrieves a value from this Widget's Model.
+     *
+     * @param property
+     * Name of the property to retrieve
+     *
+     * @param def
+     * Default value to set and return if the property is not yet in existence.
+     *
+     * @return
+     * The value of this Widget's Model at the specified property or the default
+     * value if one is specified.
+     */
+    get : function ( property, def ) {
+        var getter;
+
+        switch ( property ) {
+            case "Model" : 
+                if ( !this._model && ( def !== undefined )) {
+                    this._model = ( def instanceof Function ) ? def() : def;
+                }
+
+                return this._model;
+            case "View" : 
+                if ( !this._view && ( def !== undefined )) {
+                    this._view = ( def instanceof Function ) ? def() : def;
+                }
+
+                return this._view;
+            case "Controller" : 
+                if ( !this._controller && ( def !== undefined )) {
+                    this._controller = 
+                        ( def instanceof Function ) ? def() : def;
+                }
+
+                return this._controller;
+        }
+
+        getter = 'get' + property;
+        return this._controller[ getter ]( this, this._model, def );
     },
 
     set : function ( property, value ) {
-        var setter = 'set' + property;
+        var setter;
+
+        switch ( property ) {
+            case "Model"      : return this._mode = value       ; 
+            case "View"       : return this._view = value       ; 
+            case "Controller" : return this._controller = value ; 
+        }
+
+        setter = 'set' + property;
         return this._controller[ setter ]( this, this._model, value );
+    },
+
+    fire : function ( event, args ) {
+        var method = 'fire' + event;
+        return this._controller[ method ]( this, args );
     }
 });
 
@@ -915,7 +1035,7 @@ Widget = Base.extend({
  * Using the "observer pattern", Dashboards delegate events across their managed
  * Widgets.
  */
-Dashboard = Base.extend({
+Dashboard = Base.specialize({
     
     _widgets   : [] , // Integers --> Widgets
     _events    : {} , // Strings  --> Integers --> Controllers
